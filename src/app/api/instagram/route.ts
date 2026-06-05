@@ -1,37 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const API_KEY = process.env.WINDSOR_API_KEY
+const API_KEY = process.env.WINDSOR_API_KEY ?? process.env.NEXT_PUBLIC_WINDSOR_API_KEY ?? ''
 const BASE = 'https://connectors.windsor.ai/instagram'
 const FIELDS = 'date,account_name,reach,likes,comments,shares,saves,media_url,media_type,followers_count'
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const dateFrom = searchParams.get('date_from') ?? daysAgo(29)
-  const dateTo = searchParams.get('date_to') ?? today()
+const HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+  'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8',
+  'Referer': 'https://windsor.ai/',
+  'Origin': 'https://windsor.ai',
+}
 
-  try {
-    const [curRes, prevRes, followerRes] = await Promise.all([
-      fetch(`${BASE}?api_key=${API_KEY}&fields=${FIELDS}&date_from=${dateFrom}&date_to=${dateTo}`, { next: { revalidate: 3600 } }),
-      fetch(`${BASE}?api_key=${API_KEY}&fields=${FIELDS}&date_from=${prevMonth(dateFrom)}&date_to=${prevMonth(dateTo)}`, { next: { revalidate: 3600 } }),
-      fetch(`${BASE}?api_key=${API_KEY}&fields=date,account_name,followers_count`, { next: { revalidate: 3600 } }),
-    ])
-
-    const [curJson, prevJson, followerJson] = await Promise.all([curRes.json(), prevRes.json(), followerRes.json()])
-    if (curJson.error) return NextResponse.json({ error: curJson.error }, { status: 400 })
-
-    const { daily: data, posts } = parseRows(curJson.data ?? [])
-    const { daily: prevData } = parseRows(prevJson.data ?? [])
-    const currentFollowers = followerJson.data?.[0]?.followers_count ?? null
-
-    return NextResponse.json({ data, posts, prevData, currentFollowers })
-  } catch {
-    return NextResponse.json({ error: 'Windsor.ai 연결 실패' }, { status: 500 })
-  }
+function prevMonth(dateStr: string): string {
+  const d = new Date(dateStr)
+  d.setMonth(d.getMonth() - 1)
+  return d.toISOString().slice(0, 10)
 }
 
 type RawRow = {
   date: string
-  account_name: string
   reach: number | null
   likes: number | null
   comments: number | null
@@ -39,14 +27,13 @@ type RawRow = {
   saves: number | null
   media_url: string | null
   media_type: string | null
+  followers_count: number | null
 }
 
 function parseRows(rows: RawRow[]) {
-  // Rows with media_url = post metadata; rows with reach = daily aggregates
   const postRows = rows.filter((r) => r.media_url)
   const dailyRows = rows.filter((r) => !r.media_url && r.reach != null)
 
-  // Build daily metric map
   const dailyMap = new Map<string, { reach: number; likes: number; comments: number; shares: number; saves: number }>()
   for (const r of dailyRows) {
     dailyMap.set(r.date, {
@@ -58,20 +45,14 @@ function parseRows(rows: RawRow[]) {
     })
   }
 
-  // Deduplicate posts: one thumbnail per date (prefer IMAGE/CAROUSEL over REELS for display)
   const postByDate = new Map<string, { date: string; mediaUrl: string; mediaType: string }>()
   for (const r of postRows) {
     const existing = postByDate.get(r.date)
     if (!existing || r.media_type === 'IMAGE' || r.media_type === 'CAROUSEL_ALBUM') {
-      postByDate.set(r.date, {
-        date: r.date,
-        mediaUrl: r.media_url!,
-        mediaType: r.media_type ?? 'IMAGE',
-      })
+      postByDate.set(r.date, { date: r.date, mediaUrl: r.media_url!, mediaType: r.media_type ?? 'IMAGE' })
     }
   }
 
-  // Build posts with metrics from the same day's aggregate
   const posts = Array.from(postByDate.values()).map((p) => {
     const m = dailyMap.get(p.date) ?? { reach: 0, likes: 0, comments: 0, shares: 0, saves: 0 }
     return { ...p, ...m }
@@ -84,11 +65,41 @@ function parseRows(rows: RawRow[]) {
   return { daily, posts }
 }
 
-/** Shift date back by 1 calendar month */
-function prevMonth(dateStr: string): string {
-  const d = new Date(dateStr)
-  d.setMonth(d.getMonth() - 1)
-  return d.toISOString().slice(0, 10)
+async function windsor(dateFrom: string, dateTo: string) {
+  const url = `${BASE}?api_key=${API_KEY}&fields=${FIELDS}&date_from=${dateFrom}&date_to=${dateTo}`
+  const res = await fetch(url, { headers: HEADERS, cache: 'no-store' })
+  const json = await res.json()
+  if (json.error) throw new Error(json.error)
+  return json.data ?? []
+}
+
+async function windsorFollowers() {
+  const url = `${BASE}?api_key=${API_KEY}&fields=date,account_name,followers_count`
+  const res = await fetch(url, { headers: HEADERS, cache: 'no-store' })
+  const json = await res.json()
+  return json.data?.[0]?.followers_count ?? null
+}
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url)
+  const dateFrom = searchParams.get('date_from') ?? daysAgo(29)
+  const dateTo = searchParams.get('date_to') ?? today()
+
+  try {
+    const [curRows, prevRows, currentFollowers] = await Promise.all([
+      windsor(dateFrom, dateTo),
+      windsor(prevMonth(dateFrom), prevMonth(dateTo)),
+      windsorFollowers(),
+    ])
+
+    const { daily: data, posts } = parseRows(curRows)
+    const { daily: prevData } = parseRows(prevRows)
+
+    return NextResponse.json({ data, posts, prevData, currentFollowers })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '연결 실패'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }
 
 function today() { return new Date().toISOString().slice(0, 10) }
