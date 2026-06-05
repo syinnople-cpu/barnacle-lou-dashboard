@@ -44,7 +44,7 @@ export function ReachChart({ data, uploadDays }: Props) {
             <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={40} />
             <Tooltip
-              formatter={(v: number) => [v.toLocaleString(), '도달수']}
+              formatter={(v) => [Number(v).toLocaleString(), '도달수']}
               labelStyle={{ fontSize: 12 }}
             />
             {uploadDays.map((date) => {

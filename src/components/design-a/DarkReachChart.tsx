@@ -36,7 +36,7 @@ export function DarkReachChart({ data, uploadDays }: Props) {
           <YAxis tick={{ fontSize: 10, fill: '#ffffff50' }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} width={35} />
           <Tooltip
             contentStyle={{ background: '#1a1a2e', border: '1px solid #ffffff20', borderRadius: 12, fontSize: 12, color: '#fff' }}
-            formatter={(v: number) => [v.toLocaleString(), '도달수']}
+            formatter={(v) => [Number(v).toLocaleString(), '도달수']}
           />
           {uploadDays.map((date) => {
             const found = formatted.find((d) => d.date === date)

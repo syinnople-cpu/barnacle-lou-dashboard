@@ -34,7 +34,7 @@ export function LightReachChart({ data, uploadDays }: Props) {
           <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} width={35} />
           <Tooltip
             contentStyle={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, fontSize: 12 }}
-            formatter={(v: number) => [v.toLocaleString(), '도달수']}
+            formatter={(v) => [Number(v).toLocaleString(), '도달수']}
           />
           {uploadDays.map((date) => {
             const found = formatted.find((d) => d.date === date)
