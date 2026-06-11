@@ -17,7 +17,7 @@ export function daysAgo(n: number) {
   return d.toISOString().slice(0, 10)
 }
 
-export function useInstagramData(dateFrom: string, dateTo: string): InstagramData {
+export function useInstagramData(dateFrom: string, dateTo: string, compare: 'month' | 'week' = 'month'): InstagramData {
   const [daily, setDaily] = useState<DailyMetric[]>([])
   const [prevDaily, setPrevDaily] = useState<DailyMetric[]>([])
   const [posts, setPosts] = useState<PostItem[]>([])
@@ -25,10 +25,10 @@ export function useInstagramData(dateFrom: string, dateTo: string): InstagramDat
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchData = useCallback(async (from: string, to: string) => {
+  const fetchData = useCallback(async (from: string, to: string, cmp: string) => {
     setLoading(true); setError(null)
     try {
-      const res = await fetch(`/api/instagram?date_from=${from}&date_to=${to}`)
+      const res = await fetch(`/api/instagram?date_from=${from}&date_to=${to}&compare=${cmp}`)
       const json = await res.json()
       if (json.error) throw new Error(json.error)
       setDaily(json.data ?? [])
@@ -42,7 +42,7 @@ export function useInstagramData(dateFrom: string, dateTo: string): InstagramDat
     }
   }, [])
 
-  useEffect(() => { fetchData(dateFrom, dateTo) }, [dateFrom, dateTo, fetchData])
+  useEffect(() => { fetchData(dateFrom, dateTo, compare) }, [dateFrom, dateTo, compare, fetchData])
 
   return { daily, prevDaily, posts, currentFollowers, loading, error }
 }

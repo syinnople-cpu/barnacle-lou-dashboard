@@ -18,6 +18,12 @@ function prevMonth(dateStr: string): string {
   return d.toISOString().slice(0, 10)
 }
 
+function shiftDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr)
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
 type RawRow = {
   date: string
   reach: number | null
@@ -84,11 +90,15 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const dateFrom = searchParams.get('date_from') ?? daysAgo(29)
   const dateTo = searchParams.get('date_to') ?? today()
+  const compare = searchParams.get('compare') ?? 'month' // 'month' | 'week'
+
+  const prevFrom = compare === 'week' ? shiftDays(dateFrom, -7) : prevMonth(dateFrom)
+  const prevTo = compare === 'week' ? shiftDays(dateTo, -7) : prevMonth(dateTo)
 
   try {
     const [curRows, prevRows, currentFollowers] = await Promise.all([
       windsor(dateFrom, dateTo),
-      windsor(prevMonth(dateFrom), prevMonth(dateTo)),
+      windsor(prevFrom, prevTo),
       windsorFollowers(),
     ])
 

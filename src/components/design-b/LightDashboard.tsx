@@ -11,10 +11,26 @@ import { LightInsights } from './LightInsights'
 import { Heart, MessageCircle, Share2, Bookmark, Users, Radio, Zap } from 'lucide-react'
 import Link from 'next/link'
 
+type Mode = 'week' | 'month' | 'custom'
+
+function firstDayOfMonth() {
+  const d = new Date()
+  d.setDate(1)
+  return d.toISOString().slice(0, 10)
+}
+
 export function LightDashboard() {
-  const [dateFrom, setDateFrom] = useState(daysAgo(29))
-  const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10))
-  const { daily, prevDaily, posts, currentFollowers, loading, error } = useInstagramData(dateFrom, dateTo)
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const [mode, setMode] = useState<Mode>('month')
+  const [customFrom, setCustomFrom] = useState(daysAgo(29))
+  const [customTo, setCustomTo] = useState(todayStr)
+
+  const dateFrom = mode === 'week' ? daysAgo(6) : mode === 'month' ? firstDayOfMonth() : customFrom
+  const dateTo = mode === 'custom' ? customTo : todayStr
+  const compare: 'week' | 'month' = mode === 'week' ? 'week' : 'month'
+  const compareLabel = mode === 'week' ? 'vs 전주' : 'vs 전월'
+
+  const { daily, prevDaily, posts, currentFollowers, loading, error } = useInstagramData(dateFrom, dateTo, compare)
 
   const totalReach = sumField(daily, 'reach')
   const totalLikes = sumField(daily, 'likes')
@@ -30,7 +46,6 @@ export function LightDashboard() {
 
   return (
     <div className="min-h-screen" style={{ background: '#F4F6FA' }}>
-      {/* Sidebar + Main layout */}
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-56 shrink-0 h-screen sticky top-0 bg-white border-r border-gray-100 flex flex-col shadow-sm hidden md:flex">
@@ -69,14 +84,38 @@ export function LightDashboard() {
           <div className="bg-white border-b border-gray-100 px-6 py-3.5 sticky top-0 z-10 flex items-center justify-between shadow-sm">
             <div>
               <h1 className="text-base font-bold text-gray-900">인스타그램 대시보드</h1>
-              <p className="text-xs text-gray-400">성과 분석 · 전월 비교</p>
+              <p className="text-xs text-gray-400">성과 분석 · {compareLabel.replace('vs ', '')} 비교</p>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-600">
-                <input type="date" value={dateFrom} max={dateTo} onChange={(e) => setDateFrom(e.target.value)} className="bg-transparent outline-none" />
-                <span className="text-gray-300">~</span>
-                <input type="date" value={dateTo} min={dateFrom} max={new Date().toISOString().slice(0,10)} onChange={(e) => setDateTo(e.target.value)} className="bg-transparent outline-none" />
+              {/* 주/월 버튼 */}
+              <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs">
+                <button
+                  onClick={() => setMode('week')}
+                  className={`px-3 py-2 font-medium transition-colors ${mode === 'week' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                >주간</button>
+                <button
+                  onClick={() => setMode('month')}
+                  className={`px-3 py-2 font-medium transition-colors border-l border-gray-200 ${mode === 'month' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                >월간</button>
+                <button
+                  onClick={() => setMode('custom')}
+                  className={`px-3 py-2 font-medium transition-colors border-l border-gray-200 ${mode === 'custom' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                >직접</button>
               </div>
+              {/* 날짜 직접 입력 (custom 모드일 때만) */}
+              {mode === 'custom' && (
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-600">
+                  <input type="date" value={customFrom} max={customTo} onChange={(e) => setCustomFrom(e.target.value)} className="bg-transparent outline-none" />
+                  <span className="text-gray-300">~</span>
+                  <input type="date" value={customTo} min={customFrom} max={todayStr} onChange={(e) => setCustomTo(e.target.value)} className="bg-transparent outline-none" />
+                </div>
+              )}
+              {/* 주간/월간일 때 날짜 범위 표시 */}
+              {mode !== 'custom' && (
+                <div className="text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+                  {dateFrom} ~ {dateTo}
+                </div>
+              )}
             </div>
           </div>
 
@@ -92,7 +131,6 @@ export function LightDashboard() {
                   <LightStatCard
                     title="현재 팔로워"
                     value={currentFollowers ? currentFollowers.toLocaleString() + '명' : '—'}
-                    note="팔로워 유입수 미지원"
                     icon={<Users size={14} className="text-indigo-500" />}
                     iconBg="#EEF2FF"
                   />
@@ -100,7 +138,7 @@ export function LightDashboard() {
                     title="총 도달수"
                     value={totalReach.toLocaleString()}
                     change={pctChange(totalReach, prevReach)}
-                    sub="vs 전월"
+                    sub={compareLabel}
                     icon={<Radio size={14} className="text-violet-500" />}
                     iconBg="#F5F3FF"
                   />
@@ -108,7 +146,7 @@ export function LightDashboard() {
                     title="총 인게이지먼트"
                     value={totalEng.toLocaleString()}
                     change={pctChange(totalEng, prevEng)}
-                    sub="vs 전월"
+                    sub={compareLabel}
                     icon={<Zap size={14} className="text-pink-500" />}
                     iconBg="#FDF2F8"
                   />
@@ -116,10 +154,10 @@ export function LightDashboard() {
 
                 {/* KPI Row 2 */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <LightStatCard title="좋아요" value={totalLikes.toLocaleString()} change={pctChange(totalLikes, sumField(prevDaily,'likes'))} sub="vs 전월" small icon={<Heart size={12} className="text-amber-500" />} iconBg="#FFFBEB" />
-                  <LightStatCard title="댓글" value={totalComments.toLocaleString()} change={pctChange(totalComments, sumField(prevDaily,'comments'))} sub="vs 전월" small icon={<MessageCircle size={12} className="text-emerald-500" />} iconBg="#F0FDF4" />
-                  <LightStatCard title="공유" value={totalShares.toLocaleString()} change={pctChange(totalShares, sumField(prevDaily,'shares'))} sub="vs 전월" small icon={<Share2 size={12} className="text-sky-500" />} iconBg="#F0F9FF" />
-                  <LightStatCard title="저장" value={totalSaves.toLocaleString()} change={pctChange(totalSaves, sumField(prevDaily,'saves'))} sub="vs 전월" small icon={<Bookmark size={12} className="text-rose-500" />} iconBg="#FFF1F2" />
+                  <LightStatCard title="좋아요" value={totalLikes.toLocaleString()} change={pctChange(totalLikes, sumField(prevDaily,'likes'))} sub={compareLabel} small icon={<Heart size={12} className="text-amber-500" />} iconBg="#FFFBEB" />
+                  <LightStatCard title="댓글" value={totalComments.toLocaleString()} change={pctChange(totalComments, sumField(prevDaily,'comments'))} sub={compareLabel} small icon={<MessageCircle size={12} className="text-emerald-500" />} iconBg="#F0FDF4" />
+                  <LightStatCard title="공유" value={totalShares.toLocaleString()} change={pctChange(totalShares, sumField(prevDaily,'shares'))} sub={compareLabel} small icon={<Share2 size={12} className="text-sky-500" />} iconBg="#F0F9FF" />
+                  <LightStatCard title="저장" value={totalSaves.toLocaleString()} change={pctChange(totalSaves, sumField(prevDaily,'saves'))} sub={compareLabel} small icon={<Bookmark size={12} className="text-rose-500" />} iconBg="#FFF1F2" />
                 </div>
 
                 {/* Post feed */}
