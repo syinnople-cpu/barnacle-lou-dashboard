@@ -11,6 +11,7 @@ export interface PostItem {
   date: string
   mediaUrl: string
   mediaType: string
+  caption: string
   reach: number
   likes: number
   comments: number

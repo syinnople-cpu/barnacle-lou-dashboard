@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const API_KEY = process.env.WINDSOR_API_KEY ?? process.env.NEXT_PUBLIC_WINDSOR_API_KEY ?? ''
 const BASE = 'https://connectors.windsor.ai/instagram'
-const FIELDS = 'date,account_name,reach,likes,comments,shares,saves,media_url,media_type,followers_count'
+const FIELDS = 'date,account_name,reach,likes,comments,shares,saves,media_url,media_type,caption,followers_count'
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -33,6 +33,7 @@ type RawRow = {
   saves: number | null
   media_url: string | null
   media_type: string | null
+  caption: string | null
   followers_count: number | null
 }
 
@@ -51,11 +52,11 @@ function parseRows(rows: RawRow[]) {
     })
   }
 
-  const postByDate = new Map<string, { date: string; mediaUrl: string; mediaType: string }>()
+  const postByDate = new Map<string, { date: string; mediaUrl: string; mediaType: string; caption: string }>()
   for (const r of postRows) {
     const existing = postByDate.get(r.date)
     if (!existing || r.media_type === 'IMAGE' || r.media_type === 'CAROUSEL_ALBUM') {
-      postByDate.set(r.date, { date: r.date, mediaUrl: r.media_url!, mediaType: r.media_type ?? 'IMAGE' })
+      postByDate.set(r.date, { date: r.date, mediaUrl: r.media_url!, mediaType: r.media_type ?? 'IMAGE', caption: r.caption ?? '' })
     }
   }
 

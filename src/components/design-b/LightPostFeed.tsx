@@ -18,11 +18,27 @@ const RANK_EMOJI = ['🥇', '🥈', '🥉', '4위', '5위']
 function Thumbnail({ post }: { post: PostItem }) {
   const [imgError, setImgError] = useState(false)
 
+  if (post.mediaType === 'REELS') {
+    // 캡션 첫 줄만 추출 (최대 40자)
+    const firstLine = (post.caption || '').split('\n')[0].trim()
+    const caption = firstLine.length > 40 ? firstLine.slice(0, 40) + '…' : firstLine
+
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-purple-100 gap-1.5 px-2">
+        <Film size={18} className="text-purple-400 shrink-0" />
+        {caption ? (
+          <p className="text-[9px] text-purple-700 font-medium text-center leading-snug line-clamp-3">{caption}</p>
+        ) : (
+          <span className="text-[10px] text-purple-500 font-medium">릴스</span>
+        )}
+      </div>
+    )
+  }
+
   if (imgError) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-purple-100 gap-1">
-        <Film size={20} className="text-purple-400" />
-        <span className="text-[10px] text-purple-500 font-medium">릴스</span>
+      <div className="w-full h-full flex items-center justify-center bg-gray-100">
+        <ImageIcon size={20} className="text-gray-300" />
       </div>
     )
   }
