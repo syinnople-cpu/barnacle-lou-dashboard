@@ -2,16 +2,23 @@
 
 import { useState } from 'react'
 import { useInstagramData, daysAgo } from '@/hooks/useInstagramData'
-import { sumField, pctChange, detectUploadDays, generateInsights } from '@/lib/stats'
+import { sumField, pctChange, detectUploadDays, generateInsights, generateYoutubeInsights } from '@/lib/stats'
 import { LightStatCard } from './LightStatCard'
 import { LightReachChart } from './LightReachChart'
 import { LightEngagementChart } from './LightEngagementChart'
 import { LightPostFeed } from './LightPostFeed'
 import { LightInsights } from './LightInsights'
-import { Heart, MessageCircle, Share2, Bookmark, Users, Radio, Zap } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Bookmark, Clock, Users, Radio, Zap, Timer } from 'lucide-react'
 import Link from 'next/link'
+import { YoutubeContentComparison } from './YoutubeContentComparison'
 
 type Mode = 'week' | 'month' | 'custom'
+type Channel = 'ddagaebi' | 'kocomong'
+
+const CHANNELS: { id: Channel; label: string; platform: string }[] = [
+  { id: 'ddagaebi', label: '따개비루', platform: 'IG' },
+  { id: 'kocomong', label: '코코몽', platform: 'YT' },
+]
 
 function firstDayOfMonth() {
   const d = new Date()
@@ -24,13 +31,15 @@ export function LightDashboard() {
   const [mode, setMode] = useState<Mode>('month')
   const [customFrom, setCustomFrom] = useState(daysAgo(29))
   const [customTo, setCustomTo] = useState(todayStr)
+  const [channel, setChannel] = useState<Channel>('ddagaebi')
 
   const dateFrom = mode === 'week' ? daysAgo(6) : mode === 'month' ? firstDayOfMonth() : customFrom
   const dateTo = mode === 'custom' ? customTo : todayStr
   const compare: 'week' | 'month' = mode === 'week' ? 'week' : 'month'
   const compareLabel = mode === 'week' ? 'vs 전주' : 'vs 전월'
 
-  const { daily, prevDaily, posts, currentFollowers, loading, error } = useInstagramData(dateFrom, dateTo, compare)
+  const { daily, prevDaily, posts, videos, currentFollowers, loading, error } = useInstagramData(dateFrom, dateTo, compare, channel)
+  const isYT = channel === 'kocomong'
 
   const totalReach = sumField(daily, 'reach')
   const totalLikes = sumField(daily, 'likes')
@@ -41,8 +50,25 @@ export function LightDashboard() {
   const prevReach = sumField(prevDaily, 'reach')
   const prevEng = sumField(prevDaily, 'likes') + sumField(prevDaily, 'comments') + sumField(prevDaily, 'shares') + sumField(prevDaily, 'saves')
 
+  // YouTube: 평균 시청 지속 시간
+  const avgViewDuration = daily.length > 0
+    ? daily.reduce((a, d) => a + (d.avgViewDuration ?? 0), 0) / daily.filter(d => (d.avgViewDuration ?? 0) > 0).length || 0
+    : 0
+  const prevAvgViewDuration = prevDaily.length > 0
+    ? prevDaily.reduce((a, d) => a + (d.avgViewDuration ?? 0), 0) / prevDaily.filter(d => (d.avgViewDuration ?? 0) > 0).length || 0
+    : 0
+
+  // YouTube: 업로드 일자 — video 데이터 있으면 사용, 없으면 조회수 급등일로 대체
+  const videoUploadDays = videos.length > 0
+    ? [...new Set(videos.map(v => v.date))]
+    : detectUploadDays(daily)
+
+  // YouTube: 예상 수익 합계
+  const totalRevenue = daily.reduce((sum, d) => sum + (d.estimatedRevenue ?? 0), 0)
+  const prevRevenue = prevDaily.reduce((sum, d) => sum + (d.estimatedRevenue ?? 0), 0)
+
   const uploadDays = detectUploadDays(daily)
-  const insights = generateInsights(daily)
+  const insights = channel === 'kocomong' ? generateYoutubeInsights(daily) : generateInsights(daily)
 
   return (
     <div className="min-h-screen" style={{ background: '#F4F6FA' }}>
@@ -51,24 +77,30 @@ export function LightDashboard() {
         <aside className="w-56 shrink-0 h-screen sticky top-0 bg-white border-r border-gray-100 flex flex-col shadow-sm hidden md:flex">
           <div className="p-5 border-b border-gray-100">
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-400 to-pink-400 flex items-center justify-center text-white text-xs font-bold">따</div>
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-400 to-pink-400 flex items-center justify-center text-white text-xs font-bold">O</div>
               <div>
-                <p className="text-sm font-bold text-gray-900">따개비루</p>
-                <p className="text-xs text-gray-400">barnacle_lou</p>
+                <p className="text-sm font-bold text-gray-900">올리브스튜디오</p>
+                <p className="text-xs text-gray-400">olivestudio</p>
               </div>
             </div>
           </div>
           <nav className="p-4 flex-1">
             <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-3">채널</p>
             <div className="space-y-1">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700">
-                <span className="text-indigo-500 text-xs font-bold">IG</span>
-                <span className="text-xs font-semibold">따개비루</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-gray-400 text-xs">
-                <span className="w-3.5 h-3.5 rounded border-2 border-dashed border-gray-300 inline-block" />
-                <span>채널 추가 예정</span>
-              </div>
+              {CHANNELS.map((ch) => (
+                <button
+                  key={ch.id}
+                  onClick={() => setChannel(ch.id)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                    channel === ch.id
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className={`text-xs font-bold ${channel === ch.id ? 'text-indigo-500' : 'text-gray-400'}`}>{ch.platform}</span>
+                  <span>{ch.label}</span>
+                </button>
+              ))}
             </div>
           </nav>
           <div className="p-4 border-t border-gray-100">
@@ -83,7 +115,7 @@ export function LightDashboard() {
           {/* Top bar */}
           <div className="bg-white border-b border-gray-100 px-6 py-3.5 sticky top-0 z-10 flex items-center justify-between shadow-sm">
             <div>
-              <h1 className="text-base font-bold text-gray-900">인스타그램 대시보드</h1>
+              <h1 className="text-base font-bold text-gray-900">{CHANNELS.find(c => c.id === channel)?.platform} {CHANNELS.find(c => c.id === channel)?.label} 대시보드</h1>
               <p className="text-xs text-gray-400">성과 분석 · {compareLabel.replace('vs ', '')} 비교</p>
             </div>
             <div className="flex items-center gap-2">
@@ -129,13 +161,13 @@ export function LightDashboard() {
                 {/* KPI Row 1 */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <LightStatCard
-                    title="현재 팔로워"
+                    title={isYT ? (currentFollowers && currentFollowers < 10000 ? '신규 유입 구독자' : '현재 구독자') : '현재 팔로워'}
                     value={currentFollowers ? currentFollowers.toLocaleString() + '명' : '—'}
                     icon={<Users size={14} className="text-indigo-500" />}
                     iconBg="#EEF2FF"
                   />
                   <LightStatCard
-                    title="총 도달수"
+                    title={isYT ? '총 조회수' : '총 도달수'}
                     value={totalReach.toLocaleString()}
                     change={pctChange(totalReach, prevReach)}
                     sub={compareLabel}
@@ -143,11 +175,11 @@ export function LightDashboard() {
                     iconBg="#F5F3FF"
                   />
                   <LightStatCard
-                    title="총 인게이지먼트"
-                    value={totalEng.toLocaleString()}
-                    change={pctChange(totalEng, prevEng)}
+                    title={isYT ? '총 시청시간(분)' : '총 인게이지먼트'}
+                    value={isYT ? totalSaves.toLocaleString() : totalEng.toLocaleString()}
+                    change={isYT ? pctChange(totalSaves, sumField(prevDaily,'saves')) : pctChange(totalEng, prevEng)}
                     sub={compareLabel}
-                    icon={<Zap size={14} className="text-pink-500" />}
+                    icon={isYT ? <Clock size={14} className="text-pink-500" /> : <Zap size={14} className="text-pink-500" />}
                     iconBg="#FDF2F8"
                   />
                 </div>
@@ -155,17 +187,30 @@ export function LightDashboard() {
                 {/* KPI Row 2 */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <LightStatCard title="좋아요" value={totalLikes.toLocaleString()} change={pctChange(totalLikes, sumField(prevDaily,'likes'))} sub={compareLabel} small icon={<Heart size={12} className="text-amber-500" />} iconBg="#FFFBEB" />
-                  <LightStatCard title="댓글" value={totalComments.toLocaleString()} change={pctChange(totalComments, sumField(prevDaily,'comments'))} sub={compareLabel} small icon={<MessageCircle size={12} className="text-emerald-500" />} iconBg="#F0FDF4" />
+                  {isYT
+                    ? <LightStatCard title="예상 수익" value={totalRevenue > 0 ? `$${totalRevenue.toFixed(2)}` : '—'} change={pctChange(totalRevenue, prevRevenue)} sub={compareLabel} small icon={<Zap size={12} className="text-emerald-500" />} iconBg="#F0FDF4" />
+                    : <LightStatCard title="댓글" value={totalComments.toLocaleString()} change={pctChange(totalComments, sumField(prevDaily,'comments'))} sub={compareLabel} small icon={<MessageCircle size={12} className="text-emerald-500" />} iconBg="#F0FDF4" />
+                  }
                   <LightStatCard title="공유" value={totalShares.toLocaleString()} change={pctChange(totalShares, sumField(prevDaily,'shares'))} sub={compareLabel} small icon={<Share2 size={12} className="text-sky-500" />} iconBg="#F0F9FF" />
-                  <LightStatCard title="저장" value={totalSaves.toLocaleString()} change={pctChange(totalSaves, sumField(prevDaily,'saves'))} sub={compareLabel} small icon={<Bookmark size={12} className="text-rose-500" />} iconBg="#FFF1F2" />
+                  {isYT
+                    ? <LightStatCard title="총 인게이지먼트" value={totalEng.toLocaleString()} change={pctChange(totalEng, prevEng)} sub={compareLabel} small icon={<MessageCircle size={12} className="text-rose-500" />} iconBg="#FFF1F2" />
+                    : <LightStatCard title="저장" value={totalSaves.toLocaleString()} change={pctChange(totalSaves, sumField(prevDaily,'saves'))} sub={compareLabel} small icon={<Bookmark size={12} className="text-rose-500" />} iconBg="#FFF1F2" />
+                  }
                 </div>
 
-                {/* Post feed */}
-                {posts.length > 0 && <LightPostFeed posts={posts} />}
+                {/* Post feed — IG만 표시 */}
+                {!isYT && posts.length > 0 && <LightPostFeed posts={posts} />}
 
                 {/* Charts */}
-                <LightReachChart data={daily} uploadDays={uploadDays} />
-                <LightEngagementChart data={daily} />
+                <LightReachChart
+                  data={daily}
+                  uploadDays={isYT ? videoUploadDays : uploadDays}
+                  channel={channel}
+                />
+                <LightEngagementChart data={daily} channel={channel} />
+
+                {/* YouTube 전용: 롱폼 vs 숏폼 비교 */}
+                {isYT && <YoutubeContentComparison videos={videos} />}
 
                 {/* Insights */}
                 <LightInsights insights={insights} />

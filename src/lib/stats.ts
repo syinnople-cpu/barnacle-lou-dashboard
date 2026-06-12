@@ -133,3 +133,78 @@ export function generateInsights(data: DailyMetric[]): Insight[] {
 
   return insights
 }
+
+export function generateYoutubeInsights(data: DailyMetric[]): Insight[] {
+  const insights: Insight[] = []
+  if (data.length < 7) return insights
+
+  const half = Math.floor(data.length / 2)
+  const first = data.slice(0, half)
+  const second = data.slice(half)
+
+  const firstAvgViews = sumField(first, 'reach') / first.length
+  const secondAvgViews = sumField(second, 'reach') / second.length
+  const viewsChange = pctChange(secondAvgViews, firstAvgViews)
+
+  if (viewsChange >= 15) {
+    insights.push({
+      type: 'up',
+      title: `조회수 ${viewsChange.toFixed(0)}% 상승`,
+      body: `기간 후반 평균 조회수 ${secondAvgViews.toLocaleString('ko-KR', { maximumFractionDigits: 0 })} — 알고리즘 추천 확대 또는 영상 바이럴 효과로 추정됩니다.`,
+    })
+  } else if (viewsChange <= -15) {
+    insights.push({
+      type: 'down',
+      title: `조회수 ${Math.abs(viewsChange).toFixed(0)}% 하락`,
+      body: `기간 후반 평균 조회수 ${secondAvgViews.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}으로 감소했습니다. 썸네일·제목 최적화 또는 업로드 주기 조정이 필요합니다.`,
+    })
+  }
+
+  const firstEngRates = first.map(calcEngagementRate)
+  const secondEngRates = second.map(calcEngagementRate)
+  const firstAvgEng = firstEngRates.reduce((a, b) => a + b, 0) / firstEngRates.length
+  const secondAvgEng = secondEngRates.reduce((a, b) => a + b, 0) / secondEngRates.length
+  const engChange = pctChange(secondAvgEng, firstAvgEng)
+
+  if (engChange >= 20) {
+    insights.push({ type: 'up', title: `반응율 ${engChange.toFixed(0)}% 개선`, body: '구독자 반응이 기간 후반 크게 향상됐습니다. 영상 주제·포맷이 타겟과 잘 맞았던 것으로 보입니다.' })
+  } else if (engChange <= -20) {
+    insights.push({ type: 'down', title: `반응율 ${Math.abs(engChange).toFixed(0)}% 저하`, body: '영상 말미 구독 유도 CTA 강화 및 시청자 공감 콘텐츠 보강이 필요합니다.' })
+  }
+
+  // 최적 요일
+  const dayMap: Record<number, number[]> = {}
+  data.forEach((d) => {
+    const day = new Date(d.date).getDay()
+    if (!dayMap[day]) dayMap[day] = []
+    dayMap[day].push(d.reach)
+  })
+  const dayAvgs = Object.entries(dayMap)
+    .map(([day, views]) => ({ day: Number(day), avg: views.reduce((a, b) => a + b, 0) / views.length }))
+    .sort((a, b) => b.avg - a.avg)
+  const days = ['일', '월', '화', '수', '목', '금', '토']
+  if (dayAvgs.length >= 2) {
+    const best = dayAvgs[0]
+    const worst = dayAvgs[dayAvgs.length - 1]
+    insights.push({
+      type: 'tip',
+      title: `최적 업로드 요일: ${days[best.day]}요일 (평균 조회수 ${best.avg.toLocaleString('ko-KR', { maximumFractionDigits: 0 })})`,
+      body: `${days[worst.day]}요일(${worst.avg.toLocaleString('ko-KR', { maximumFractionDigits: 0 })})은 조회수가 가장 낮습니다. 핵심 영상은 ${days[best.day]}요일에 집중 업로드하세요.`,
+    })
+  }
+
+  const totalEng = sumField(data, 'likes') + sumField(data, 'comments') + sumField(data, 'shares')
+  const shareRatio = totalEng > 0 ? (sumField(data, 'shares') / totalEng) * 100 : 0
+  const commentRatio = totalEng > 0 ? (sumField(data, 'comments') / totalEng) * 100 : 0
+
+  if (shareRatio >= 15) {
+    insights.push({ type: 'tip', title: '공유율 높음 → 바이럴 영상 강화 추천', body: `공유가 전체 반응의 ${shareRatio.toFixed(0)}%입니다. 공감·챌린지·정보성 포맷이 신규 구독자 유입에 효과적입니다.` })
+  }
+  if (commentRatio >= 15) {
+    insights.push({ type: 'tip', title: '댓글 참여 활발 → 커뮤니티 강화 추천', body: `댓글이 ${commentRatio.toFixed(0)}%입니다. 영상에서 질문을 유도하거나 댓글 이벤트를 진행해 알고리즘 노출을 극대화하세요.` })
+  }
+
+  insights.push({ type: 'tip', title: '콘텐츠 제안: 고조회수 영상 포맷 반복', body: '상위 조회수 영상의 썸네일·제목 패턴·영상 길이·주제를 분석해 동일 방식으로 제작하세요. YouTube 알고리즘이 선호하는 패턴이 존재할 가능성이 높습니다.' })
+
+  return insights
+}

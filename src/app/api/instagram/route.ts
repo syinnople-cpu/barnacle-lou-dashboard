@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const API_KEY = process.env.WINDSOR_API_KEY ?? process.env.NEXT_PUBLIC_WINDSOR_API_KEY ?? ''
+const API_KEY_DDAGAEBI = process.env.WINDSOR_API_KEY ?? process.env.NEXT_PUBLIC_WINDSOR_API_KEY ?? ''
+const API_KEY_KOCOMONG = process.env.WINDSOR_API_KEY_KOCOMONG ?? process.env.NEXT_PUBLIC_WINDSOR_API_KEY_KOCOMONG ?? ''
 const BASE = 'https://connectors.windsor.ai/instagram'
 const FIELDS = 'date,account_name,reach,likes,comments,shares,saves,media_url,media_type,followers_count'
 
@@ -71,16 +72,22 @@ function parseRows(rows: RawRow[]) {
   return { daily, posts }
 }
 
-async function windsor(dateFrom: string, dateTo: string) {
-  const url = `${BASE}?api_key=${API_KEY}&fields=${FIELDS}&date_from=${dateFrom}&date_to=${dateTo}`
+function getApiKey(account: string) {
+  return account === 'kocomong' ? API_KEY_KOCOMONG : API_KEY_DDAGAEBI
+}
+
+async function windsor(dateFrom: string, dateTo: string, account: string) {
+  const apiKey = getApiKey(account)
+  const url = `${BASE}?api_key=${apiKey}&fields=${FIELDS}&date_from=${dateFrom}&date_to=${dateTo}`
   const res = await fetch(url, { headers: HEADERS, cache: 'no-store' })
   const json = await res.json()
   if (json.error) throw new Error(json.error)
   return json.data ?? []
 }
 
-async function windsorFollowers() {
-  const url = `${BASE}?api_key=${API_KEY}&fields=date,account_name,followers_count`
+async function windsorFollowers(account: string) {
+  const apiKey = getApiKey(account)
+  const url = `${BASE}?api_key=${apiKey}&fields=date,account_name,followers_count`
   const res = await fetch(url, { headers: HEADERS, cache: 'no-store' })
   const json = await res.json()
   return json.data?.[0]?.followers_count ?? null
@@ -91,15 +98,16 @@ export async function GET(req: NextRequest) {
   const dateFrom = searchParams.get('date_from') ?? daysAgo(29)
   const dateTo = searchParams.get('date_to') ?? today()
   const compare = searchParams.get('compare') ?? 'month' // 'month' | 'week'
+  const account = searchParams.get('account') ?? 'ddagaebi'
 
   const prevFrom = compare === 'week' ? shiftDays(dateFrom, -7) : prevMonth(dateFrom)
   const prevTo = compare === 'week' ? shiftDays(dateTo, -7) : prevMonth(dateTo)
 
   try {
     const [curRows, prevRows, currentFollowers] = await Promise.all([
-      windsor(dateFrom, dateTo),
-      windsor(prevFrom, prevTo),
-      windsorFollowers(),
+      windsor(dateFrom, dateTo, account),
+      windsor(prevFrom, prevTo, account),
+      windsorFollowers(account),
     ])
 
     const { daily: data, posts } = parseRows(curRows)
